@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import mongoose from "mongoose";
@@ -8,7 +9,7 @@ import authRoutes from "./src/server/routes/auth.js";
 import savingsRoutes from "./src/server/routes/savings.js";
 
 async function findAvailablePort(startPort: number, host = "0.0.0.0") {
-  const tryPort = (port: number) =>
+  const testPort = (port: number) =>
     new Promise<number>((resolve, reject) => {
       const tester = net.createServer();
 
@@ -30,8 +31,8 @@ async function findAvailablePort(startPort: number, host = "0.0.0.0") {
 
   let port = startPort;
   while (true) {
-    const available = await tryPort(port);
-    if (available !== 0) return available;
+    const availablePort = await testPort(port);
+    if (availablePort !== 0) return availablePort;
     port += 1;
   }
 }
@@ -44,7 +45,6 @@ async function startServer() {
   const HMR_PORT = await findAvailablePort(requestedHmrPort);
 
   app.use(cors());
-  // Increase payload limit for base64 images
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
@@ -56,8 +56,8 @@ async function startServer() {
   app.use("/api/auth", authRoutes);
   app.use("/api/savings", savingsRoutes);
 
-  // Database Connection
-  const MONGODB_URI ="mongodb+srv://thanha:thanhamoney@cluster0.ys8jodb.mongodb.net/?appName=Cluster0" ;
+  // Database Connection (Loads securely from Render Environment Variables)
+  const MONGODB_URI = process.env.MONGODB_URI;
   if (!MONGODB_URI) {
     console.warn("MONGODB_URI is not defined. The APIs will not work until you set it.");
   } else {
@@ -67,7 +67,7 @@ async function startServer() {
       .catch((err) => console.error("Error connecting to MongoDB", err));
   }
 
-  // Vite middleware for development
+  // Vite middleware for local development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: {
@@ -78,14 +78,15 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
+    // Production settings for Render
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
-    // In Express v4, use app.get('*', ...)
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
 
+  // Start the server
   app.listen(PORT, "0.0.0.0", () => {
     if (PORT !== requestedPort) {
       console.warn(`Port ${requestedPort} is busy. Using ${PORT} instead.`);
@@ -93,7 +94,7 @@ async function startServer() {
     if (HMR_PORT !== requestedHmrPort) {
       console.warn(`HMR port ${requestedHmrPort} is busy. Using ${HMR_PORT} instead.`);
     }
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server running on port ${PORT}`);
   });
 }
 
